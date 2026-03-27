@@ -194,7 +194,7 @@ fi
 echo ""
 echo -e "${BLUE}${BOLD}━━━ 第 2 层: 系统包 (apt/snap) ━━━${NC}"
 if command -v apt &>/dev/null; then
-    APT_HITS=$(apt search "$QUERY" 2>/dev/null | grep -v "^Sorting\|^Full Text\|^WARNING" | grep -i "$QUERY" | head -5 || true)
+    APT_HITS=$(timeout 10 apt search "$QUERY" 2>/dev/null | grep -v "^Sorting\|^Full Text\|^WARNING" | grep -i "$QUERY" | head -5 || true)
     if [ -n "$APT_HITS" ]; then
         echo "$APT_HITS"
         APT_FOUND=1
@@ -204,7 +204,7 @@ if command -v apt &>/dev/null; then
 fi
 
 if command -v snap &>/dev/null; then
-    SNAP_HITS=$(snap find "$QUERY" 2>/dev/null | head -5 || true)
+    SNAP_HITS=$(timeout 10 snap find "$QUERY" 2>/dev/null | head -5 || true)
     if [ -n "$SNAP_HITS" ] && ! echo "$SNAP_HITS" | grep -q "No matching snaps"; then
         echo -e "${CYAN}  snap 结果:${NC}"
         echo "$SNAP_HITS"
@@ -216,7 +216,7 @@ fi
 echo ""
 echo -e "${BLUE}${BOLD}━━━ 第 3 层: Python / Node 包 ━━━${NC}"
 if command -v pip3 &>/dev/null; then
-    PIP_HITS=$(pip3 index versions "$QUERY" 2>/dev/null | head -3 || true)
+    PIP_HITS=$(timeout 10 pip3 index versions "$QUERY" 2>/dev/null | head -3 || true)
     if [ -n "$PIP_HITS" ]; then
         echo "pip: $PIP_HITS"
         PIP_FOUND=1
@@ -224,8 +224,8 @@ if command -v pip3 &>/dev/null; then
 fi
 
 if command -v npm &>/dev/null; then
-    NPM_HITS=$(npm search "$QUERY" 2>/dev/null | head -3 || true)
-    if [ -n "$NPM_HITS" ]; then
+    NPM_HITS=$(timeout 10 npm search "$QUERY" 2>/dev/null | head -3 || true)
+    if [ -n "$NPM_HITS" ] && ! echo "$NPM_HITS" | grep -qi "no matches"; then
         echo "npm: $NPM_HITS"
         NPM_FOUND=1
     fi
@@ -239,7 +239,7 @@ fi
 echo ""
 echo -e "${BLUE}${BOLD}━━━ 第 4 层: ClawHub 技能 ━━━${NC}"
 if command -v npx &>/dev/null; then
-    CLAWHUB_HITS=$(npx clawhub search "$QUERY" 2>/dev/null | head -5 || true)
+    CLAWHUB_HITS=$(timeout 15 npx clawhub search "$QUERY" 2>/dev/null | head -5 || true)
     if [ -n "$CLAWHUB_HITS" ]; then
         echo "$CLAWHUB_HITS"
         CLAWHUB_FOUND=1

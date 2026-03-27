@@ -1,6 +1,6 @@
 ---
 name: auto-installer
-description: "万能补全器：遇到任何阻碍自动分析并解决。触发条件：exec 报错 (command not found / ModuleNotFoundError / Permission denied / 等)；用户说'帮我装'、'找工具'、'不会做'、'报错了'、'搞不定'；agent 判断缺少工具/技能/依赖/配置。不仅限于安装工具，还包括修复配置、解决依赖链、搜索网络方案、生成临时脚本等一切让任务能继续的手段。"
+description: "遇到 command not found / ModuleNotFoundError / Permission denied 等报错时，自动搜索并安装所需依赖工具。支持 apt/snap/pip/npm 降级链，含 200+ 工具映射表。"
 version: "1.2.0"
 tags: [installer, resolver, auto-fix, dependency]
 ---
@@ -121,6 +121,8 @@ npx clawhub search "<关键词>" 2>/dev/null
 | 1 | **pip3** | `pip3 install --break-system-packages <pkg>` |
 | 2 | **pip3 指定源** | `pip3 install -i https://pypi.tuna.tsinghua.edu.cn/simple <pkg>` |
 | 3 | **conda** | `conda install <pkg>`（如已装 conda） |
+
+> ⚠️ `--break-system-packages` 会绕过系统 Python 隔离，在容器环境安全，生产服务器建议优先用 venv/pipx。
 
 ### GitHub Release 下载模板
 

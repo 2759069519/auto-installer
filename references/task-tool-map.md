@@ -33,7 +33,7 @@
 
 | 任务 | 工具 | 安装降级链 |
 |------|------|-----------|
-| 处理 JSON | `jq` | `apt jq → dl github.com/stedolan/jq` |
+| 处理 JSON | `jq` | `apt jq → dl github.com/jqlang/jq` |
 | 处理 YAML | `yq` | `snap yq → dl github.com/mikefarah/yq` |
 | 处理 XML | `xmlstarlet` | `apt xmlstarlet` |
 | 处理 CSV（强大） | `miller (mlr)` | `apt miller → dl github.com/johnkerl/miller` |
