@@ -1,7 +1,7 @@
 ---
 name: auto-installer
 description: "遇到 command not found / ModuleNotFoundError / Permission denied 等报错时，自动搜索并安装所需依赖工具。支持 apt/snap/pip/npm 降级链，含 200+ 工具映射表。"
-version: "1.2.0"
+version: "1.3.0"
 tags: [installer, resolver, auto-fix, dependency]
 ---
 
@@ -172,3 +172,25 @@ echo "| 任务描述 | 工具名 | 降级链命令 |" >> references/task-tool-ma
 - 解决了什么问题
 - 用了什么方法（哪条降级链成功了）
 - 花了多长时间
+
+---
+
+## 🌐 GitHub 代理加速（多代理自动降级）
+
+脚本内置 7 个 GitHub 代理，按优先级自动选择最快可用的：
+
+| 优先级 | 代理地址 | 说明 |
+|-------|---------|------|
+| 1 | `ghfast.top` | 主力代理，稳定性好 |
+| 2 | `gh.llkk.cc` | 备用代理 1 |
+| 3 | `gh-proxy.com` | 备用代理 2 |
+| 4 | `gh.monlor.com` | 备用代理 3 |
+| 5 | `gh.xxooo.cf` | 备用代理 4 |
+| 6 | `gh.jasonzeng.dev` | 备用代理 5 |
+| 7 | `gh.dpik.top` | 备用代理 6 |
+
+**特性：**
+- 并行测试所有代理，自动选择响应最快的
+- 结果缓存，首次调用后复用
+- 国际网络直连，不走代理
+- 全部不可用时自动回退到原始 GitHub URL

@@ -7,6 +7,9 @@
 # ============================================================
 set -euo pipefail
 
+# 确保 snap 命令在 PATH 中
+[ -d /snap/bin ] && export PATH="/snap/bin:$PATH"
+
 QUERY="${1:?用法: bash auto-install-search.sh <关键词> [--install]}"
 DO_INSTALL="${2:-}"
 GREEN='\033[0;32m'
@@ -33,11 +36,92 @@ is_china_network() {
     ! curl -s --connect-timeout 3 https://www.google.com >/dev/null 2>&1
 }
 
-# GitHub 镜像加速 URL
+# GitHub 代理列表（按优先级排列，多个备用）
+GITHUB_PROXIES=(
+    "https://ghfast.top"
+    "https://gh.llkk.cc"
+    "https://gh-proxy.com"
+    "https://gh.monlor.com"
+    "https://gh.xxooo.cf"
+    "https://gh.jasonzeng.dev"
+    "https://gh.dpik.top"
+)
+
+# 缓存已找到的可用代理
+_CACHED_PROXY=""
+
+# 并行测试所有代理，返回最快可用的（总耗时不超过最慢单个）
+find_fastest_proxy() {
+    local test_path="/https://raw.githubusercontent.com/cli/cli/master/README.md"
+    local tmpdir=$(mktemp -d)
+    local pids=()
+
+    # 并行发起所有代理测试
+    for i in "${!GITHUB_PROXIES[@]}"; do
+        proxy="${GITHUB_PROXIES[$i]}"
+        (
+            start=$(date +%s%N)
+            code=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 3 --max-time 8 "${proxy}${test_path}" 2>/dev/null) || code="000"
+            end=$(date +%s%N)
+            elapsed=$(( (end - start) / 1000000 ))  # ms
+            echo "${code} ${elapsed} ${proxy}" > "${tmpdir}/proxy_${i}"
+        ) &
+        pids+=($!)
+    done
+
+    # 等待所有测试完成（最多10秒）
+    local timeout_timer=0
+    while [ $timeout_timer -lt 10 ]; do
+        local all_done=1
+        for pid in "${pids[@]}"; do
+            if kill -0 "$pid" 2>/dev/null; then
+                all_done=0
+                break
+            fi
+        done
+        [ "$all_done" -eq 1 ] && break
+        sleep 0.5
+        timeout_timer=$((timeout_timer + 1))
+    done
+
+    # 杀掉残留进程
+    for pid in "${pids[@]}"; do
+        kill "$pid" 2>/dev/null || true
+    done
+    wait 2>/dev/null
+
+    # 找到最快的 200 代理
+    local best_proxy=""
+    local best_time=999999
+    for f in "${tmpdir}"/proxy_*; do
+        [ -f "$f" ] || continue
+        local line=$(cat "$f")
+        local code=$(echo "$line" | awk '{print $1}')
+        local ms=$(echo "$line" | awk '{print $2}')
+        local px=$(echo "$line" | awk '{print $3}')
+        if [ "$code" = "200" ] && [ "$ms" -lt "$best_time" ]; then
+            best_time=$ms
+            best_proxy=$px
+        fi
+    done
+
+    rm -rf "$tmpdir"
+    echo "$best_proxy"
+}
+
+# GitHub 镜像加速 URL（自动选择最快可用代理，带缓存）
 github_mirror_url() {
     local url="$1"
-    if is_china_network; then
-        echo "https://ghfast.top/${url}"
+    if ! is_china_network; then
+        echo "$url"
+        return
+    fi
+    # 首次调用时并行测试所有代理
+    if [ -z "$_CACHED_PROXY" ]; then
+        _CACHED_PROXY=$(find_fastest_proxy)
+    fi
+    if [ -n "$_CACHED_PROXY" ]; then
+        echo "${_CACHED_PROXY}/${url}"
     else
         echo "$url"
     fi
@@ -53,16 +137,26 @@ pip_mirror_flag() {
 }
 
 # 验证命令是否真正可用
+# 支持 "name (alias)" 格式，如 "ripgrep (rg)" → 先查 rg，再查 ripgrep
 verify_cmd() {
     local cmd="$1"
-    if command -v "$cmd" &>/dev/null; then
-        local version=$("$cmd" --version 2>/dev/null | head -1 || echo "installed")
-        echo -e "  ${GREEN}${BOLD}✅ 安装成功: ${cmd} — ${version}${NC}"
-        return 0
+    local cmd_names=()
+    # 解析 "name (alias)" 格式
+    if [[ "$cmd" =~ ^([a-zA-Z0-9_-]+)[[:space:]]*\(([a-zA-Z0-9_-]+)\)$ ]]; then
+        cmd_names+=("${BASH_REMATCH[2]}")  # alias 优先（如 rg）
+        cmd_names+=("${BASH_REMATCH[1]}")  # 主名（如 ripgrep）
     else
-        echo -e "  ${RED}${BOLD}❌ 安装后验证失败: ${cmd} 不存在${NC}"
-        return 1
+        cmd_names+=("$cmd")
     fi
+    for name in "${cmd_names[@]}"; do
+        if command -v "$name" &>/dev/null; then
+            local version=$("$name" --version 2>/dev/null | head -1 || echo "installed")
+            echo -e "  ${GREEN}${BOLD}✅ 安装成功: ${name} — ${version}${NC}"
+            return 0
+        fi
+    done
+    echo -e "  ${RED}${BOLD}❌ 安装后验证失败: ${cmd} 不存在${NC}"
+    return 1
 }
 
 # ── 降级链安装函数 ────────────────────────────────────
@@ -111,8 +205,20 @@ install_from_chain() {
                 echo -e "  ${YELLOW}  ✗ npm 失败${NC}"
                 ;;
             dl|download)
-                echo -e "  ${YELLOW}  ⚡ 需要手动下载: ${pkg}${NC}"
-                echo -e "  ${CYAN}  镜像URL: $(github_mirror_url "https://github.com/${pkg}")${NC}"
+                # 处理 URL 格式：支持完整 URL 和 github.com/repo 两种格式
+                local dl_url
+                if echo "$pkg" | grep -qE "^https?://"; then
+                    dl_url="$pkg"
+                else
+                    dl_url="https://${pkg}"
+                fi
+                local mirror_url=$(github_mirror_url "$dl_url")
+                echo -e "  ${YELLOW}  ⚡ 需要下载: ${dl_url}${NC}"
+                echo -e "  ${CYAN}  镜像加速: ${mirror_url}${NC}"
+                # Release 页面也用镜像加速
+                local release_url="${dl_url}/releases/latest"
+                local mirror_release=$(github_mirror_url "$release_url")
+                echo -e "  ${CYAN}  Release页: ${mirror_release}${NC}"
                 ;;
             src|source)
                 echo -e "  ${YELLOW}  ⚡ 需要源码编译: ${pkg}${NC}"
