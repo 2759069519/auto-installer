@@ -366,3 +366,53 @@ apt install -y tmux fzf zoxide btop ripgrep fd-find tree
 | 任务 | 工具 | 安装降级链 |
 |------|------|-----------|
 | Docker管理TUI | `lazydocker` | `apt lazydocker` |
+
+---
+
+## 🔤 中文别名速查（v2.2 新增）
+
+| 中文描述 | 工具 | 安装降级链 |
+|---------|------|-----------|
+| 解压文件/解压缩/解包 | `p7zip-full` | `apt p7zip-full` |
+| 压缩文件/打包压缩 | `zip` | `apt zip` |
+| 下载文件/HTTP下载 | `wget` | `apt wget` |
+| 查找文件/搜索文件名 | `fd-find (fd)` | `apt fd-find → dl github.com/sharkdp/fd` |
+| 搜索文本/搜索内容 | `ripgrep (rg)` | `apt ripgrep → dl github.com/BurntSushi/ripgrep` |
+| 查看目录/目录树 | `tree` | `apt tree → snap tree → src` |
+| 系统监控/资源监控 | `btop` | `apt btop → snap btop → dl github.com/aristocratos/btop` |
+| 进程管理/查看进程 | `htop` | `apt htop` |
+| PDF处理/转换PDF | `poppler-utils` | `apt poppler-utils` |
+| 图片处理/图片转换 | `imagemagick` | `apt imagemagick` |
+| 音频处理/音频转换 | `sox` | `apt sox libsox-fmt-all` |
+| 视频处理/视频转换 | `ffmpeg` | `apt ffmpeg → snap ffmpeg` |
+| JSON处理/解析JSON | `jq` | `apt jq → dl github.com/jqlang/jq` |
+| YAML处理/解析YAML | `yq` | `snap yq → dl github.com/mikefarah/yq` |
+| HTTP请求/发请求 | `httpie` | `apt httpie → pip httpie` |
+| SSH连接/远程登录 | `sshpass` | `apt sshpass` |
+| 密码管理/加密文件 | `gnupg` | `apt gnupg` |
+| 格式转换/文档转换 | `pandoc` | `apt pandoc → dl github.com/jgm/pandoc` |
+| 截图/屏幕截图 | `scrot` | `apt scrot` |
+| OCR/文字识别 | `tesseract` | `apt tesseract-ocr tesseract-ocr-chi-sim` |
+| Git增强/Git界面 | `lazygit` | `apt lazygit → snap lazygit → dl github.com/jesseduffield/lazygit` |
+| Docker管理/容器管理 | `lazydocker` | `apt lazydocker` |
+| 模糊搜索/模糊查找 | `fzf` | `apt fzf → dl github.com/junegunn/fzf → src` |
+| 磁盘分析/磁盘占用 | `ncdu` | `apt ncdu` |
+| 端口查看/网络连接 | `lsof` | `apt lsof` |
+| 网络扫描/端口扫描 | `nmap` | `apt nmap` |
+| 终端复用/后台运行 | `tmux` | `apt tmux` |
+| 并行执行/批量执行 | `parallel` | `apt parallel` |
+| 日志查看/日志分析 | `lnav` | `apt lnav → snap lnav` |
+| 内存分析/内存泄漏 | `valgrind` | `apt valgrind` |
+| 权限错误/没有权限 | `chmod` | `chmod` |
+| Python数据分析 | `pandas` | `pip pandas → pip -i https://pypi.tuna.tsinghua.edu.cn/simple pandas` |
+| Python机器学习 | `scikit-learn` | `pip scikit-learn → pip -i https://pypi.tuna.tsinghua.edu.cn/simple scikit-learn` |
+| Python画图/数据可视化 | `matplotlib` | `pip matplotlib → pip -i https://pypi.tuna.tsinghua.edu.cn/simple matplotlib` |
+| Excel处理/读写Excel | `openpyxl, xlrd` | `pip openpyxl xlrd → pip -i https://pypi.tuna.tsinghua.edu.cn/simple openpyxl xlrd` |
+| 网页爬虫/抓取网页 | `requests, beautifulsoup4` | `pip requests beautifulsoup4 lxml → pip -i https://pypi.tuna.tsinghua.edu.cn/simple requests beautifulsoup4 lxml` |
+| Markdown转HTML | `markdown` | `pip markdown → pip -i https://pypi.tuna.tsinghua.edu.cn/simple markdown` |
+| RSS订阅/RSS解析 | `feedparser` | `pip feedparser → pip -i https://pypi.tuna.tsinghua.edu.cn/simple feedparser` |
+| 服务器初始化/新机器 | `build-essential` | `apt build-essential` |
+| Docker安装/装Docker | `docker` | `curl -fsSL https://get.docker.com | bash` |
+| Go语言/Go开发 | `golang` | `apt golang` |
+| Node.js/Node | `nodejs` | `apt nodejs npm` |
+| Rust开发 | `rustc` | `apt rustc cargo` |

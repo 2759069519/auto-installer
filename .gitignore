@@ -2,3 +2,7 @@
 references/learned-tools.log
 references/failed-installs.log
 references/usage-stats.json
+
+# 安装历史和已装索引（运行时生成）
+data/install-history.jsonl
+data/installed-index.json

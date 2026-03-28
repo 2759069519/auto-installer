@@ -1,15 +1,17 @@
 #!/bin/bash
 # ============================================================
-# 🦞 auto-installer v2.1: 6层智能搜索 + 降级链 + 自学习(成功+失败) + 批量安装
+# 🦞 auto-installer v2.2: 6层智能搜索 + 降级链 + 自学习 + 自动回写 + JSONL历史 + 已装检测
 #
 # 用法:
 #   bash auto-install-search.sh <关键词|报错信息>                # 仅搜索
 #   bash auto-install-search.sh <关键词|报错信息> --install      # 搜索并自动安装
-#   bash auto-install-search.sh --install tool1 tool2 tool3     # 批量安装
+#   bash auto-install-search.sh --install tool1 tool2 tool3     # 批量安装（走6层全链路）
 #   bash auto-install-search.sh --learn <工具名> [描述]          # 手动学习
 #   bash auto-install-search.sh --promote                       # 整理学习记录到映射表
 #   bash auto-install-search.sh --history                       # 查看学习历史
 #   bash auto-install-search.sh --failures                      # 查看失败记录
+#   bash auto-install-search.sh --scan                          # 扫描系统已装工具
+#   bash auto-install-search.sh --stats                         # 查看安装统计
 #
 # 退出码:
 #   0 = 成功（找到了方案或安装成功）
@@ -32,6 +34,9 @@ MAP_FILE="${SKILL_DIR}/references/task-tool-map.md"
 LEARN_LOG="${SKILL_DIR}/references/learned-tools.log"
 FAIL_LOG="${SKILL_DIR}/references/failed-installs.log"
 STATS_FILE="${SKILL_DIR}/references/usage-stats.json"
+DATA_DIR="${SKILL_DIR}/data"
+HISTORY_FILE="${DATA_DIR}/install-history.jsonl"
+INSTALLED_INDEX="${DATA_DIR}/installed-index.json"
 
 # ── 全局状态 ─────────────────────────────────────────
 QUERY=""
@@ -47,8 +52,7 @@ parse_args() {
         echo -e "${DIM}      bash auto-install-search.sh --install tool1 tool2 tool3${NC}"
         echo -e "${DIM}      bash auto-install-search.sh --learn <工具名> [描述]${NC}"
         echo -e "${DIM}      bash auto-install-search.sh --promote${NC}"
-        echo -e "${DIM}      bash auto-install-search.sh --history${NC}"
-        echo -e "${DIM}      bash auto-install-search.sh --failures${NC}"
+        echo -e "${DIM}      bash auto-install-search.sh --history / --failures / --stats / --scan${NC}"
         exit 1
     fi
 
@@ -57,6 +61,8 @@ parse_args() {
         --history)  MODE="history" ;;
         --failures) MODE="failures" ;;
         --promote)  MODE="promote" ;;
+        --scan)     MODE="scan" ;;
+        --stats)    MODE="stats" ;;
         --install)
             DO_INSTALL=1
             shift
@@ -169,20 +175,112 @@ extract_cmd_name() {
     echo "$raw"
 }
 
+# ── JSONL 安装历史 ───────────────────────────────────
+
+log_install_history() {
+    local query="$1" cmd="$2" method="$3" success="$4" time_ms="${5:-0}"
+    mkdir -p "$DATA_DIR"
+    local ts; ts=$(date '+%Y-%m-%dT%H:%M:%S%z')
+    # 用 python 写 JSONL，避免 shell JSON 转义问题
+    python3 -c "
+import json
+entry = {'ts':'${ts}','query':'''${query}'''.replace(\"'\",\"\\\\'\"),'cmd':'${cmd}','method':'${method}','success':${success},'time_ms':${time_ms}}
+with open('${HISTORY_FILE}','a') as f:
+    f.write(json.dumps(entry, ensure_ascii=False) + '\n')
+" 2>/dev/null || echo "{\"ts\":\"${ts}\",\"query\":\"${query}\",\"cmd\":\"${cmd}\",\"method\":\"${method}\",\"success\":${success},\"time_ms\":${time_ms}}" >> "$HISTORY_FILE"
+}
+
+# ── 已安装工具索引 ───────────────────────────────────
+
+is_already_installed() {
+    local cmd="$1"
+    # 检查命令是否已在 PATH 中
+    command -v "$cmd" &>/dev/null && return 0
+    # 检查 dpkg
+    dpkg -s "$cmd" 2>/dev/null | grep -q "Status: install ok installed" && return 0
+    return 1
+}
+
+do_scan() {
+    echo -e "\n${BOLD}${CYAN}🔍 扫描系统已安装工具${NC}\n"
+    mkdir -p "$DATA_DIR"
+    local tmp="${DATA_DIR}/.scan-tmp.json"
+    echo '{}' > "$tmp"
+
+    # dpkg 已装包
+    if command -v dpkg &>/dev/null; then
+        local count; count=$(dpkg -l 2>/dev/null | grep '^ii' | wc -l)
+        echo -e "  ${CYAN}📦 dpkg: ${count} 个包${NC}"
+        python3 -c "
+import json, subprocess
+d=json.load(open('${tmp}'))
+result=subprocess.run(['dpkg-query','-W','-f=\${Package}\\\n'], capture_output=True, text=True)
+pkgs=[p.strip() for p in result.stdout.strip().split('\n') if p.strip()]
+d['apt']={'count':len(pkgs),'packages':pkgs[:200]}
+json.dump(d, open('${tmp}','w'), indent=2, ensure_ascii=False)
+" 2>/dev/null || true
+    fi
+
+    # pip 已装包
+    if command -v pip3 &>/dev/null; then
+        local pcount; pcount=$(pip3 list --format=json 2>/dev/null | python3 -c "import json,sys;print(len(json.load(sys.stdin)))" 2>/dev/null || echo "0")
+        echo -e "  ${CYAN}🐍 pip3: ${pcount} 个包${NC}"
+        python3 -c "
+import json, subprocess
+d=json.load(open('${tmp}'))
+result=subprocess.run(['pip3','list','--format=json'], capture_output=True, text=True)
+pkgs=json.loads(result.stdout) if result.stdout else []
+d['pip']={'count':len(pkgs),'packages':pkgs[:200]}
+json.dump(d, open('${tmp}','w'), indent=2, ensure_ascii=False)
+" 2>/dev/null || true
+    fi
+
+    # npm 全局包
+    if command -v npm &>/dev/null; then
+        local ncount; ncount=$(npm list -g --depth=0 2>/dev/null | grep -c '──' || echo "0")
+        echo -e "  ${CYAN}📦 npm: ${ncount} 个全局包${NC}"
+        python3 -c "
+import json, subprocess
+d=json.load(open('${tmp}'))
+result=subprocess.run(['npm','list','-g','--json','--depth=0'], capture_output=True, text=True)
+try: data=json.loads(result.stdout); pkgs=list(data.get('dependencies',{}).keys())
+except: pkgs=[]
+d['npm']={'count':len(pkgs),'packages':pkgs}
+json.dump(d, open('${tmp}','w'), indent=2, ensure_ascii=False)
+" 2>/dev/null || true
+    fi
+
+    # snap 包
+    if command -v snap &>/dev/null; then
+        local scount; scount=$(snap list 2>/dev/null | tail -n +2 | wc -l || echo "0")
+        echo -e "  ${CYAN}📦 snap: ${scount} 个包${NC}"
+        python3 -c "
+import json, subprocess
+d=json.load(open('${tmp}'))
+result=subprocess.run(['snap','list'], capture_output=True, text=True)
+lines=result.stdout.strip().split('\n')[1:]
+pkgs=[l.split()[0] for l in lines if l.strip()]
+d['snap']={'count':len(pkgs),'packages':pkgs}
+json.dump(d, open('${tmp}','w'), indent=2, ensure_ascii=False)
+" 2>/dev/null || true
+    fi
+
+    mv "$tmp" "$INSTALLED_INDEX"
+    echo -e "\n  ${GREEN}${BOLD}✅ 索引已保存: ${INSTALLED_INDEX}${NC}\n"
+}
+
 # ── 学习 & 失败记录 ─────────────────────────────────
 
 # 检查某条降级链步骤是否近期失败过
 is_recently_failed() {
     local tool="$1" method="$2" pkg="$3"
     [ ! -f "$FAIL_LOG" ] && return 1
-    # 24小时内的失败记录算"近期"
-    local cutoff; cutoff=$(date -d '24 hours ago' '+%Y-%m-%d %H:%M:%S' 2>/dev/null || date '+%Y-%m-%d %H:%M:%S')
     grep -q "| ${tool} | ${method} ${pkg} |" "$FAIL_LOG" 2>/dev/null
 }
 
-# 记录成功学习
+# 记录成功学习（安装后自动回写映射表）
 record_success() {
-    local tool="$1" desc="${2:-自动学习}" chain="${3:-}" repo="${4:-}"
+    local tool="$1" desc="${2:-自动学习}" chain="${3:-}" query="${4:-}"
     [ -z "$tool" ] && return 0
     # 去重：已存在则跳过
     grep -qi "^| ${tool} |" "$MAP_FILE" 2>/dev/null && return 0
@@ -191,8 +289,31 @@ record_success() {
     mkdir -p "$(dirname "$LEARN_LOG")"
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] ${tool} | 已学习 | ${chain} | ${desc}" >> "$LEARN_LOG"
     echo -e "  ${GREEN}📝 已记录成功: ${tool}${NC}"
+
+    # ✨ v2.2: 自动回写映射表
+    auto_writeback_mapping "$tool" "$desc" "$chain"
+
     # 更新使用统计
     increment_stat "$tool"
+}
+
+# 自动回写映射表
+auto_writeback_mapping() {
+    local tool="$1" desc="$2" chain="$3"
+    # 检查映射表是否已有此工具
+    grep -qi "| \`${tool}" "$MAP_FILE" 2>/dev/null && return 0
+
+    # 检查自动发现分类
+    if ! grep -q "🔧 自动发现的工具" "$MAP_FILE" 2>/dev/null; then
+        echo "" >> "$MAP_FILE"
+        echo "## 🔧 自动发现的工具" >> "$MAP_FILE"
+        echo "" >> "$MAP_FILE"
+        echo "| 任务 | 工具 | 安装降级链 |" >> "$MAP_FILE"
+        echo "|------|------|-----------|" >> "$MAP_FILE"
+    fi
+
+    echo "| ${desc} | \`${tool}\` | \`${chain}\` |" >> "$MAP_FILE"
+    echo -e "  ${GREEN}📄 已回写映射表: ${tool}${NC}"
 }
 
 # 记录失败
@@ -208,11 +329,9 @@ increment_stat() {
     local tool="$1"
     mkdir -p "$(dirname "$STATS_FILE")"
     if [ ! -f "$STATS_FILE" ]; then echo '{}' > "$STATS_FILE"; fi
-    # 简单的计数器（用 grep + 替换，避免依赖 jq）
     local count
     count=$(grep -o "\"${tool}\":[0-9]*" "$STATS_FILE" 2>/dev/null | grep -o '[0-9]*$' || echo "0")
     count=$((count + 1))
-    # 写入（用 python 避免 JSON 手工拼接）
     python3 -c "
 import json, sys
 f='${STATS_FILE}'; t='${tool}'; c=${count}
@@ -256,6 +375,54 @@ do_failures() {
     cat "$FAIL_LOG"
 }
 
+# ── 安装统计 ─────────────────────────────────────────
+
+do_stats() {
+    echo -e "\n${BOLD}${CYAN}📊 安装统计${NC}\n"
+    # 使用统计
+    if [ -f "$STATS_FILE" ]; then
+        echo -e "  ${CYAN}🔑 使用次数:${NC}"
+        python3 -c "
+import json
+d=json.load(open('${STATS_FILE}'))
+for k,v in sorted(d.items(), key=lambda x:-x[1]):
+    if k != '_searches':
+        print(f'    {k}: {v} 次')
+" 2>/dev/null || echo "    (无法读取)"
+    fi
+    # JSONL 历史
+    if [ -f "$HISTORY_FILE" ]; then
+        local total success fail
+        local total success fail rate
+        read -r total success fail rate < <(python3 -c "
+import json
+lines=open('${HISTORY_FILE}').readlines()
+t=len(lines)
+s=sum(1 for l in lines if ('true' in l and 'success' in l))
+f=t-s
+r=(s*100//t) if t>0 else 0
+print(t,s,f,r)
+" 2>/dev/null || echo "0 0 0 0")
+        echo ""
+        echo -e "  ${CYAN}📦 安装历史: ${total} 条${NC}"
+        echo -e "  ${GREEN}  ✅ 成功: ${success}${NC}"
+        echo -e "  ${RED}  ❌ 失败: ${fail}${NC}"
+        echo -e "  ${CYAN}  📈 成功率: ${rate}%${NC}"
+    fi
+    # 学习记录
+    if [ -f "$LEARN_LOG" ]; then
+        local lc; lc=$(wc -l < "$LEARN_LOG")
+        echo -e "\n  ${CYAN}📝 已学习工具: ${lc} 个${NC}"
+    fi
+    # 映射表
+    if [ -f "$MAP_FILE" ]; then
+        local mc; mc=$(grep -c '^|' "$MAP_FILE" 2>/dev/null || echo 0)
+        mc=$((mc - 3))  # 减去表头行
+        echo -e "  ${CYAN}🗺️  映射表条目: ${mc} 个${NC}"
+    fi
+    echo ""
+}
+
 # ── 整理学习记录到映射表 ─────────────────────────────
 
 do_promote() {
@@ -264,7 +431,6 @@ do_promote() {
 
     local promoted=0 skipped=0
     while IFS= read -r line; do
-        # 格式: [timestamp] tool | 已学习 | chain | desc
         local tool desc chain
         tool=$(echo "$line" | sed 's/^\[[^]]*\] //' | awk -F'|' '{print $1}' | xargs)
         chain=$(echo "$line" | sed 's/^\[[^]]*\] //' | awk -F'|' '{print $3}' | xargs)
@@ -278,8 +444,6 @@ do_promote() {
             skipped=$((skipped+1)); continue
         fi
 
-        # 写入映射表的「🔧 自动发现的工具」分类
-        # 先检查该分类是否存在，不存在则添加
         if ! grep -q "🔧 自动发现的工具" "$MAP_FILE" 2>/dev/null; then
             echo "" >> "$MAP_FILE"
             echo "## 🔧 自动发现的工具" >> "$MAP_FILE"
@@ -288,14 +452,12 @@ do_promote() {
             echo "|------|------|-----------|" >> "$MAP_FILE"
         fi
 
-        # 追加条目
         echo "| ${desc} | \`${tool}\` | \`${chain}\` |" >> "$MAP_FILE"
         echo -e "  ${GREEN}✓ 已写入: ${tool} → ${chain}${NC}"
         promoted=$((promoted+1))
     done < "$LEARN_LOG"
 
     echo -e "\n  ${GREEN}${BOLD}整理完成: ${promoted} 个已写入, ${skipped} 个跳过${NC}"
-    # 清空已整理的学习记录
     if [ "$promoted" -gt 0 ]; then
         > "$LEARN_LOG"
         echo -e "  ${DIM}学习记录已清空${NC}"
@@ -330,20 +492,32 @@ infer_from_error() {
     if [[ "$input" =~ ImportError.*libGL ]]; then
         echo "tool=libgl1-mesa-glx cmd=libgl1-mesa-glx chain=apt libgl1-mesa-glx type=library"; return 0
     fi
+    # Permission denied → chmod
+    if [[ "$input" =~ Permission[[:space:]]+denied ]]; then
+        echo "tool=chmod cmd=chmod chain= type=builtin"; return 0
+    fi
     return 1
 }
 
 # ── 降级链安装 ───────────────────────────────────────
 
 install_from_chain() {
-    local chain="$1" cmd_name="$2"
+    local chain="$1" cmd_name="$2" query="${3:-$cmd_name}"
     local sudo_p; sudo_p=$(has_sudo)
     [ "$sudo_p" = "NEED_SUDO" ] && { echo -e "  ${YELLOW}⚠ 需要 sudo 权限${NC}"; sudo_p=""; }
 
     echo -e "\n${BOLD}${CYAN}🔧 安装降级链: ${chain}${NC}\n"
 
+    # ✨ 检查是否已安装
+    if is_already_installed "$cmd_name"; then
+        local ver; ver=$("$cmd_name" --version 2>/dev/null | head -1 || echo "already installed")
+        echo -e "  ${GREEN}${BOLD}✅ 已安装: ${cmd_name} — ${ver}${NC}"
+        log_install_history "$query" "$cmd_name" "already" "true" "0"
+        return 0
+    fi
+
     IFS='→' read -ra STEPS <<< "$chain"
-    local tried_any=0
+    local tried_any=0 install_start; install_start=$(date +%s%N)
     for step in "${STEPS[@]}"; do
         step=$(echo "$step" | xargs | tr -d '`')
         local method; method=$(echo "$step" | awk '{print $1}')
@@ -359,7 +533,7 @@ install_from_chain() {
         tried_any=1
         echo -e "${BLUE}  尝试: ${method} ${pkg}...${NC}"
 
-        local install_ok=0
+        local install_ok=0 step_start; step_start=$(date +%s%N)
         case "$method" in
             apt)
                 ${sudo_p}apt install -y $pkg 2>/dev/null && install_ok=1
@@ -405,17 +579,25 @@ install_from_chain() {
 
         # 验证 + 学习
         if [ $install_ok -eq 1 ]; then
+            local step_end; step_end=$(date +%s%N)
+            local elapsed_ms=$(( (step_end - step_start) / 1000000 ))
             if [ "$method" = "pip" ]; then
-                # pip 包不需要命令行验证
                 echo -e "  ${GREEN}  ✓ pip 安装成功${NC}"
-                record_success "$cmd_name" "自动学习" "${method} ${pkg}"
+                record_success "$cmd_name" "自动学习" "${method} ${pkg}" "$query"
+                log_install_history "$query" "$cmd_name" "$method" "true" "$elapsed_ms"
                 return 0
             elif verify_cmd "$cmd_name"; then
-                record_success "$cmd_name" "自动学习" "${method} ${pkg}"
+                record_success "$cmd_name" "自动学习" "${method} ${pkg}" "$query"
+                log_install_history "$query" "$cmd_name" "$method" "true" "$elapsed_ms"
                 return 0
             fi
         fi
     done
+
+    # 记录失败到 JSONL
+    local step_end; step_end=$(date +%s%N)
+    local elapsed_ms=$(( (step_end - install_start) / 1000000 ))
+    log_install_history "$query" "$cmd_name" "chain_failed" "false" "$elapsed_ms"
 
     if [ $tried_any -eq 0 ]; then
         echo -e "  ${YELLOW}  ⚠ 所有步骤均被跳过（近期均失败过）${NC}"
@@ -429,7 +611,7 @@ install_from_chain() {
 # ── GitHub Release 下载 ─────────────────────────────
 
 try_download() {
-    local pkg="$1" cmd_name="$2" sudo_p="$3"
+    local pkg="$1" cmd_name="$2" sudo_p="${3:-}"
     local repo_path="" dl_url=""
 
     if echo "$pkg" | grep -qE "^https?://"; then
@@ -552,7 +734,7 @@ do_search() {
 
     echo ""
     echo -e "${BOLD}${CYAN}╔══════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${BOLD}${CYAN}║  🦞 Auto-Installer v2.1 · 6层搜索 + 自学习(成功+失败)       ║${NC}"
+    echo -e "${BOLD}${CYAN}║  🦞 Auto-Installer v2.2 · 6层搜索 + 自学习 + 自动回写       ║${NC}"
     echo -e "${BOLD}${CYAN}╚══════════════════════════════════════════════════════════════╝${NC}"
     echo -e "  ${YELLOW}关键词: ${BOLD}${QUERY}${NC}"
     [ "$DO_INSTALL" -eq 1 ] && echo -e "  ${GREEN}模式: 搜索 + 自动安装${NC}" || echo -e "  ${CYAN}模式: 仅搜索${NC}"
@@ -570,9 +752,9 @@ do_search() {
         if [ -z "$HITS" ]; then
             HITS=$(grep -i "$QUERY" "$MAP_FILE" 2>/dev/null | grep "^|" | grep -v "^| 任务" | grep -v "^|------" | grep -v "^| 能力" | head -5 || true)
         fi
-        # 去除常见后缀再搜
+        # 去除常见前缀/后缀再搜
         if [ -z "$HITS" ]; then
-            local cq; cq=$(echo "$QUERY" | sed 's/^lib//' | sed 's/-dev$//' | sed 's/-tools$//' | sed 's/-utils$//')
+            local cq; cq=$(echo "$QUERY" | sed 's/^lib//' | sed 's/-dev$//' | sed 's/-tools$//' | sed 's/-utils$//' | sed 's/^python3-//' | sed 's/^golang-//')
             [ "$cq" != "$QUERY" ] && HITS=$(grep -i "| \`${cq}" "$MAP_FILE" 2>/dev/null | head -5 || true)
         fi
         if [ -n "$HITS" ]; then
@@ -662,7 +844,7 @@ do_search() {
         if [ "$DO_INSTALL" -eq 1 ]; then
             echo -e "${BOLD}${CYAN}║${NC}  ${GREEN}正在安装...${NC}"
             echo -e "${BOLD}${CYAN}╚══════════════════════════════════════════════════════════════╝${NC}"
-            install_from_chain "$MC" "$MCMD" || EXIT_CODE=1
+            install_from_chain "$MC" "$MCMD" "$QUERY" || EXIT_CODE=1
         else
             echo -e "${BOLD}${CYAN}║${NC}  ${CYAN}加 --install 自动安装${NC}"
             echo -e "${BOLD}${CYAN}╚══════════════════════════════════════════════════════════════╝${NC}"
@@ -690,18 +872,59 @@ do_batch() {
     for tool in "${ALL_ARGS[@]}"; do
         echo -e "${BOLD}── [$((ok+fail+1))/${total}] ${tool} ──${NC}"
         QUERY="$tool"; DO_INSTALL=1
-        # 内联搜索+安装（不重复打印标题）
+        # ✨ v2.2: 批量模式也走6层全链路搜索
         local MF=0; local MC="" MCMD=""
+        # 第1层: 映射表
         if [ -f "$MAP_FILE" ]; then
             local h; h=$(grep -i "| \`${tool}" "$MAP_FILE" 2>/dev/null | head -1 || true)
             [ -z "$h" ] && h=$(grep -i "${tool}" "$MAP_FILE" 2>/dev/null | grep "^|" | grep -v "任务\|------\|能" | head -1 || true)
+            [ -z "$h" ] && h=$(grep -i "(${tool})" "$MAP_FILE" 2>/dev/null | grep "^|" | head -1 || true)
             if [ -n "$h" ]; then
                 MC=$(echo "$h" | awk -F'|' '{print $4}' | xargs | tr -d '`')
                 MCMD=$(echo "$h" | awk -F'|' '{print $3}' | xargs | tr -d '`')
                 MF=1
             fi
         fi
-        # 学习记录
+        # 第2层: 智能推理
+        if [ "$MF" -eq 0 ]; then
+            local inf=""
+            if inf=$(infer_from_error "$tool"); then
+                MC=$(echo "$inf" | grep -oP 'chain=\K.*(?= type=)')
+                MCMD=$(echo "$inf" | grep -oP 'tool=\K[^ ]+')
+                # 别名匹配
+                if [ -f "$MAP_FILE" ]; then
+                    local ah; ah=$(grep -i "(${MCMD})" "$MAP_FILE" 2>/dev/null | grep "^|" | head -1 || true)
+                    if [ -n "$ah" ]; then
+                        MC=$(echo "$ah" | awk -F'|' '{print $4}' | xargs | tr -d '`')
+                        MCMD=$(echo "$ah" | awk -F'|' '{print $3}' | xargs | tr -d '`')
+                    fi
+                fi
+                MF=1
+            fi
+        fi
+        # 第3层: apt search
+        if [ "$MF" -eq 0 ] && command -v apt &>/dev/null; then
+            local ah; ah=$(timeout 10 apt search "$tool" 2>/dev/null | grep -i "$tool" | grep -v "^Sorting\|^Full Text\|^WARNING" | head -1 || true)
+            if [ -n "$ah" ]; then
+                local pkg; pkg=$(echo "$ah" | awk -F'/' '{print $1}' | xargs)
+                [ -n "$pkg" ] && { MC="apt ${pkg}"; MCMD="$pkg"; MF=1; }
+            fi
+        fi
+        # 第4层: pip search
+        if [ "$MF" -eq 0 ] && command -v pip3 &>/dev/null; then
+            local ph; ph=$(timeout 10 pip3 index versions "$tool" 2>/dev/null | head -1 || true)
+            if [ -n "$ph" ]; then
+                MC="pip ${tool}"; MCMD="$tool"; MF=1
+            fi
+        fi
+        # 第5层: npm search
+        if [ "$MF" -eq 0 ] && command -v npm &>/dev/null; then
+            local nh; nh=$(timeout 10 npm search "$tool" 2>/dev/null | head -1 || true)
+            if [ -n "$nh" ] && ! echo "$nh" | grep -qi "no matches"; then
+                MC="npm ${tool}"; MCMD="$tool"; MF=1
+            fi
+        fi
+        # 第6层: 学习记录
         if [ "$MF" -eq 0 ] && [ -f "$LEARN_LOG" ]; then
             local lh; lh=$(grep -i "$tool" "$LEARN_LOG" 2>/dev/null | head -1 || true)
             if [ -n "$lh" ]; then
@@ -711,9 +934,11 @@ do_batch() {
             fi
         fi
         if [ "$MF" -eq 1 ] && [ -n "$MC" ]; then
-            if install_from_chain "$MC" "$MCMD"; then ok=$((ok+1)); else fail=$((fail+1)); fi
+            if install_from_chain "$MC" "$MCMD" "$tool"; then ok=$((ok+1)); else fail=$((fail+1)); fi
         else
-            echo -e "  ${RED}✗ 未找到方案，跳过${NC}"; fail=$((fail+1))
+            echo -e "  ${RED}✗ 6层全部未命中，跳过${NC}"
+            log_install_history "$tool" "$tool" "not_found" "false" "0"
+            fail=$((fail+1))
         fi
         echo ""
     done
@@ -730,6 +955,8 @@ case "$MODE" in
     history) do_history ;;
     failures) do_failures ;;
     promote) do_promote ;;
+    scan)    do_scan ;;
+    stats)   do_stats ;;
 esac
 
 exit $EXIT_CODE
