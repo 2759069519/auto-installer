@@ -1,0 +1,4 @@
+# 运行时日志（自动创建）
+references/learned-tools.log
+references/failed-installs.log
+references/usage-stats.json

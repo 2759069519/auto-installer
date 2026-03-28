@@ -1,87 +1,59 @@
 # 🦞 Auto-Installer 万能补全器
 
-> **任何阻碍 → 自动解决。不问用户，直接干。**
->
-> `v1.3.0` · MIT License
+> **任何阻碍 → 自动解决。成功学，失败也学。越用越强。**
 
 OpenClaw 智能技能：遇到任何环境阻碍（命令找不到、模块缺失、权限问题等）时，自动分析并解决。
 
----
+## ✨ 核心特性
 
-## ✨ 特性
+- **6 层递进搜索**：映射表 → 智能推理 → 系统包搜索 → pip/npm → ClawHub → 学习记录
+- **安装降级链**：每条工具支持多路径安装（apt→snap→pip→npm→GitHub下载→源码编译），首选失败自动降级
+- **🧠 自学习（成功+失败）**：成功安装自动记录，失败也记录（24h 内自动跳过避免重试）
+- **📥 dl 真正下载**：调用 GitHub API → 架构匹配 → 镜像加速下载 → 自动解压安装
+- **🇨🇳 国内镜像加速**：7 个 GitHub 代理并行测速自动选择最快，pip 走清华源
+- **🔤 中英文双搜**：中文描述（如"压缩文件"）也能命中映射表
+- **🧠 智能推理**：从 `command not found`/`ModuleNotFoundError` 等报错自动推断依赖 + 别名匹配
+- **📦 批量安装**：`--install tool1 tool2 tool3`
+- **🔄 学习整理**：`--promote` 将学习记录正式写入映射表
+- **📊 213+ 工具映射**：任务描述直接对应安装命令，秒级响应
+- **退出码信号**：6层全未命中返回退出码 10，供 agent 联网搜索
 
-- **5 层递进搜索**：映射表 → 智能推理 → 系统包搜索 → 联网搜索 → 创造方案
-- **安装降级链**：每条工具支持多路径安装（apt→snap→pip→npm→手动下载），首选失败自动降级
-- **国内镜像加速**：自动检测网络环境，**7 个 GitHub 代理并行测速自动选择最快**，pip 走清华源
-- **全场景覆盖**：文件搜索、数据处理、网络、文档、图片、音视频、开发、DevOps、数据库等 15+ 分类
-- **200+ 工具映射**：任务描述直接对应安装命令，秒级响应
-- **智能命令验证**：自动识别 `name (alias)` 格式（如 `ripgrep (rg)`），优先验证别名
-- **自我学习**：每次解决新问题后自动更新映射表
-
-## 📁 项目结构
-
-```
-auto-installer/
-├── README.md                          # 项目说明
-├── SKILL.md                           # 技能主文档
-├── references/
-│   └── task-tool-map.md               # 任务→工具映射表 (213)，含降级链
-└── scripts/
-    └── auto-install-search.sh         # 5层搜索 + 自动安装脚本
-```
-
-## 🚀 安装
+## 📦 安装
 
 ```bash
 git clone https://github.com/2759069519/auto-installer.git ~/.openclaw/skills/auto-installer
 ```
 
-## 📖 使用
-
-### 搜索模式
+## 🚀 使用
 
 ```bash
+# 搜索工具
 bash scripts/auto-install-search.sh "jq"
+
+# 搜索并自动安装
+bash scripts/auto-install-search.sh "fzf" --install
+
+# 从报错推断（自动识别别名：rg → ripgrep）
+bash scripts/auto-install-search.sh "command not found: rg" --install
+
+# 中文关键词
+bash scripts/auto-install-search.sh "压缩文件"
+
+# 批量安装
+bash scripts/auto-install-search.sh --install ripgrep fjq jq bat tree
+
+# 手动学习
+bash scripts/auto-install-search.sh --learn "lazydocker" "Docker管理TUI"
+
+# 整理学习到映射表
+bash scripts/auto-install-search.sh --promote
+
+# 查看历史
+bash scripts/auto-install-search.sh --history
+bash scripts/auto-install-search.sh --failures
 ```
 
-### 自动安装模式
-
-```bash
-bash scripts/auto-install-search.sh "jq" --install
-```
-
-映射表命中后自动按降级链安装，安装完验证命令是否可用。
-
-## 🔗 安装降级链
-
-每个工具支持多路径安装，首选失败自动尝试下一条：
-
-```
-CLI 工具:  apt → snap → pipx → npm → GitHub Release → 源码编译
-Python 库: pip → pip(清华镜像) → conda
-```
-
-## 🌐 GitHub 代理加速（v1.3.0 新增）
-
-内置 **7 个 GitHub 代理**，并行测试自动选择响应最快的：
-
-| 优先级 | 代理地址 | 特点 |
-|-------|---------|------|
-| 1 | `ghfast.top` | 主力代理，稳定性好 |
-| 2 | `gh.llkk.cc` | 备用代理 |
-| 3 | `gh-proxy.com` | 备用代理 |
-| 4 | `gh.monlor.com` | 响应快 |
-| 5 | `gh.xxooo.cf` | 备用代理 |
-| 6 | `gh.jasonzeng.dev` | 备用代理 |
-| 7 | `gh.dpik.top` | 备用代理 |
-
-**特性：**
-- 并行测试所有代理（首次 ~10s），自动选择最快的
-- 结果缓存，后续调用秒级响应
-- 国际网络直连，不走代理
-- 全部不可用时自动回退到原始 GitHub URL
-
-## 📋 映射表覆盖范围
+## 📊 工具分类
 
 | 分类 | 工具数 |
 |------|--------|
@@ -103,38 +75,40 @@ Python 库: pip → pip(清华镜像) → conda
 | 🐍 Python 数据科学 & ML | 19 |
 | 🦞 ClawHub 技能 | 6 |
 | 🧩 常见报错修复 | 16 |
-| 🔧 常用组合安装 | 7 |
+| 🔧 自动发现的工具 | 持续增长 |
 
-## 📝 Changelog
+## 📁 文件结构
 
-### v1.3.0 (2026-03-28)
+```
+auto-installer/
+├── README.md                         # 本文件
+├── SKILL.md                          # 技能主文档（Agent 读取）
+├── references/
+│   ├── task-tool-map.md              # 213+ 工具映射表（含降级链）
+│   ├── learned-tools.log             # 成功学习记录
+│   ├── failed-installs.log           # 失败学习记录（24h 防重试）
+│   └── usage-stats.json              # 使用统计
+└── scripts/
+    └── auto-install-search.sh        # 主脚本（6层搜索 + 降级链 + 自学习）
+```
 
-- ✨ **GitHub 代理多备份**：从 1 个代理升级到 7 个，并行测速自动选择最快
-- ✨ **代理结果缓存**：首次测试后缓存，后续调用秒响应
-- 🐛 修复 snap 安装后命令找不到（`/snap/bin` 不在 PATH）
-- 🐛 修复 dl 模式 GitHub URL 双重 `github.com` 前缀问题
-- 🐛 修复 `verify_cmd` 不支持 `name (alias)` 格式（如 `ripgrep (rg)`）
-- 🔧 优化 dl 模式输出，显示 Release 页面镜像链接
-- 🔧 SKILL.md 新增代理配置文档
+## 📋 更新日志
 
-### v1.2.0-fix (2026-03-27)
+### v2.1.0
+- ✨ 自学习-失败：安装失败记录，24h 内自动跳过
+- ✨ 批量安装：`--install tool1 tool2 tool3`
+- ✨ 学习整理：`--promote` 写入正式映射表
+- ✨ 退出码 10：6层全未命中供 agent 联网搜索
+- ✨ dpkg 兜底验证
+- ✨ 使用统计
+- 🔧 中文搜索增强 / 别名映射表交叉匹配 / dl 真正下载 / sudo 检测
 
-- 🐛 修复 npm "No matches found" 误判为命中结果
-- 🐛 所有包管理器搜索加 timeout 保护
-- 🔧 jq GitHub 地址 `stedolan/jq` → `jqlang/jq`
+### v2.0.0
+- ✨ 智能推理层 / 自学习 / 中文支持 / 6层全部实装
 
-### v1.2.0 (2026-03-27)
+### v1.3.0
+- ✨ 7 个 GitHub 代理 / 降级链 / 200+ 工具映射
 
-- ✨ 每个工具增加安装降级链
-- ✨ 自动检测国内网络，GitHub 镜像加速
-- ✨ pip 自动切换清华源
-- ✨ `--install` 自动安装模式
-- ✨ 200+ 工具全部更新为降级链格式
-
-### v1.1.0 (2026-03-18)
-
-- ✨ 初始版本，基础搜索 + 安装功能
-
-## 📄 License
+## License
 
 MIT

@@ -7,8 +7,10 @@
 - `snap` = snap install
 - `pip` = pip3 install --break-system-packages
 - `npm` = npm install -g
-- `dl` = 手动下载 GitHub Release（用镜像加速）
+- `dl` = 自动下载 GitHub Release 二进制（国内镜像加速）
 - `src` = 源码编译
+- `go` = go install
+- `pipx` = pipx install
 
 ---
 
@@ -20,11 +22,11 @@
 | 查找文件名/路径 | `fd-find (fd)` | `apt fd-find → dl github.com/sharkdp/fd` |
 | 查看文件（语法高亮） | `bat (batcat)` | `apt bat → snap bat → dl github.com/sharkdp/bat` |
 | 查看目录树结构 | `tree` | `apt tree → snap tree → src` |
-| 快速文本搜索 | `silversearcher (ag)` | `apt silversearcher-ag` |
+| 快速文本搜索 | `silversearcher (ag)` | `apt silversearcher-ag → src github.com/ggreer/the_silver_searcher` |
 | 数据库定位文件 | `locate (mlocate)` | `apt mlocate` |
 | 识别文件类型 | `file` | `apt file` |
 | 管道进度条 | `pv` | `apt pv` |
-| cp/mv/dd 进度 | `progress` | `apt progress` |
+| cp/mv/dd 进度 | `progress` | `apt progress → src github.com/Xfennec/progress` |
 | sponge / vidir / ts | `moreutils` | `apt moreutils` |
 
 ---
@@ -38,7 +40,7 @@
 | 处理 XML | `xmlstarlet` | `apt xmlstarlet` |
 | 处理 CSV（强大） | `miller (mlr)` | `apt miller → dl github.com/johnkerl/miller` |
 | 处理 CSV（简单） | `csvtool` | `apt csvtool` |
-| 万能数据查询 | `dasel` | `dl github.com/TomWright/dasel → go install` |
+| 万能数据查询 | `dasel` | `dl github.com/TomWright/dasel → go install github.com/TomWright/dasel` |
 | 处理 TOML | `toml-cli` | `pip toml-cli` |
 
 ---
@@ -153,7 +155,7 @@
 | 交互式命令自动化 | `expect` | `apt expect` |
 | 终端复用（强） | `tmux` | `apt tmux` |
 | 终端复用（经典） | `screen` | `apt screen` |
-| 容器 | `docker` | `curl -fsSL https://get.docker.com \| bash` |
+| 容器 | `docker` | `curl -fsSL https://get.docker.com | bash` |
 
 ---
 
@@ -192,7 +194,7 @@
 | JSON lint | `jsonlint` | `npm jsonlint` |
 | 环境变量管理 | `direnv` | `apt direnv → snap direnv` |
 | HTTP 压测 | `wrk` | `apt wrk → src` |
-| 反向代理测试 | `hey` | `go install → dl github.com/rakyll/hey` |
+| 反向代理测试 | `hey` | `go install github.com/rakyll/hey → dl github.com/rakyll/hey` |
 
 ---
 
@@ -235,7 +237,7 @@
 | readline 包装 | `rlwrap` | `apt rlwrap` |
 | 目录快速跳转 | `zoxide` | `apt zoxide → dl github.com/ajeetdsouza/zoxide` |
 | 模糊查找 | `fzf` | `apt fzf → dl github.com/junegunn/fzf → src` |
-| 终端文件管理 | `yazi` | `cargo install yazi → dl` |
+| 终端文件管理 | `yazi` | `cargo install yazi → dl github.com/sxyazi/yazi` |
 | Git TUI | `lazygit` | `apt lazygit → snap lazygit → dl github.com/jesseduffield/lazygit` |
 
 ---
@@ -258,24 +260,24 @@
 | 任务 | 工具 | 安装降级链 |
 |------|------|-----------|
 | 数组 / 矩阵计算 | `numpy` | `pip numpy → pip -i https://pypi.tuna.tsinghua.edu.cn/simple numpy` |
-| 数据分析 | `pandas` | `pip pandas` |
-| 科学计算 | `scipy` | `pip scipy` |
-| 机器学习 | `scikit-learn` | `pip scikit-learn` |
-| 梯度提升 | `xgboost` | `pip xgboost` |
-| 统计建模 | `statsmodels` | `pip statsmodels` |
-| 数据可视化 | `matplotlib` | `pip matplotlib` |
-| 统计可视化 | `seaborn` | `pip seaborn` |
-| Jupyter Notebook | `jupyter` | `pip jupyter` |
-| Excel 读写 | `openpyxl, xlrd` | `pip openpyxl xlrd` |
-| 表格格式化 | `tabulate` | `pip tabulate` |
-| YAML（Python） | `pyyaml` | `pip pyyaml` |
-| HTTP 客户端 | `requests` | `pip requests` |
-| 网页解析 | `beautifulsoup4, lxml` | `pip beautifulsoup4 lxml` |
-| 图片处理（Python） | `Pillow` | `pip Pillow` |
-| PDF 生成（Python） | `reportlab` | `pip reportlab` |
-| Markdown 处理 | `markdown` | `pip markdown` |
-| RSS 解析 | `feedparser` | `pip feedparser` |
-| HTML 解析 | `html5lib` | `pip html5lib` |
+| 数据分析 | `pandas` | `pip pandas → pip -i https://pypi.tuna.tsinghua.edu.cn/simple pandas` |
+| 科学计算 | `scipy` | `pip scipy → pip -i https://pypi.tuna.tsinghua.edu.cn/simple scipy` |
+| 机器学习 | `scikit-learn` | `pip scikit-learn → pip -i https://pypi.tuna.tsinghua.edu.cn/simple scikit-learn` |
+| 梯度提升 | `xgboost` | `pip xgboost → pip -i https://pypi.tuna.tsinghua.edu.cn/simple xgboost` |
+| 统计建模 | `statsmodels` | `pip statsmodels → pip -i https://pypi.tuna.tsinghua.edu.cn/simple statsmodels` |
+| 数据可视化 | `matplotlib` | `pip matplotlib → pip -i https://pypi.tuna.tsinghua.edu.cn/simple matplotlib` |
+| 统计可视化 | `seaborn` | `pip seaborn → pip -i https://pypi.tuna.tsinghua.edu.cn/simple seaborn` |
+| Jupyter Notebook | `jupyter` | `pip jupyter → pip -i https://pypi.tuna.tsinghua.edu.cn/simple jupyter` |
+| Excel 读写 | `openpyxl, xlrd` | `pip openpyxl xlrd → pip -i https://pypi.tuna.tsinghua.edu.cn/simple openpyxl xlrd` |
+| 表格格式化 | `tabulate` | `pip tabulate → pip -i https://pypi.tuna.tsinghua.edu.cn/simple tabulate` |
+| YAML（Python） | `pyyaml` | `pip pyyaml → pip -i https://pypi.tuna.tsinghua.edu.cn/simple pyyaml` |
+| HTTP 客户端 | `requests` | `pip requests → pip -i https://pypi.tuna.tsinghua.edu.cn/simple requests` |
+| 网页解析 | `beautifulsoup4, lxml` | `pip beautifulsoup4 lxml → pip -i https://pypi.tuna.tsinghua.edu.cn/simple beautifulsoup4 lxml` |
+| 图片处理（Python） | `Pillow` | `pip Pillow → pip -i https://pypi.tuna.tsinghua.edu.cn/simple Pillow` |
+| PDF 生成（Python） | `reportlab` | `pip reportlab → pip -i https://pypi.tuna.tsinghua.edu.cn/simple reportlab` |
+| Markdown 处理 | `markdown` | `pip markdown → pip -i https://pypi.tuna.tsinghua.edu.cn/simple markdown` |
+| RSS 解析 | `feedparser` | `pip feedparser → pip -i https://pypi.tuna.tsinghua.edu.cn/simple feedparser` |
+| HTML 解析 | `html5lib` | `pip html5lib → pip -i https://pypi.tuna.tsinghua.edu.cn/simple html5lib` |
 
 ---
 
@@ -358,3 +360,9 @@ apt install -y tmux fzf zoxide btop ripgrep fd-find tree
 
 **"帮我发邮件"**
 → Python smtplib（标准库，无需安装）
+
+## 🔧 自动发现的工具
+
+| 任务 | 工具 | 安装降级链 |
+|------|------|-----------|
+| Docker管理TUI | `lazydocker` | `apt lazydocker` |
