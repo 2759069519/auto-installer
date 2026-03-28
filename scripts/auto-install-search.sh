@@ -280,7 +280,7 @@ is_recently_failed() {
 
 # 记录成功学习（安装后自动回写映射表）
 record_success() {
-    local tool="$1" desc="${2:-自动学习}" chain="${3:-}" query="${4:-}"
+    local tool="$1" desc="${2:-自动学习}" chain="${3:-}" query="${4:-}" skip_wb="${5:-0}"
     [ -z "$tool" ] && return 0
     # 去重：已存在则跳过
     grep -qi "^| ${tool} |" "$MAP_FILE" 2>/dev/null && return 0
@@ -291,7 +291,7 @@ record_success() {
     echo -e "  ${GREEN}📝 已记录成功: ${tool}${NC}"
 
     # ✨ v2.2: 自动回写映射表
-    auto_writeback_mapping "$tool" "$desc" "$chain"
+    if [ "$skip_wb" = "1" ]; then echo -e "  ${DIM}  跳过回写（无描述）${NC}"; else auto_writeback_mapping "$tool" "$desc" "$chain"; fi
 
     # 更新使用统计
     increment_stat "$tool"
@@ -356,7 +356,7 @@ do_learn() {
         [ -n "$src" ] && method="apt"
     fi
     [ -n "$method" ] && chain="${method} ${tool}" || chain="apt ${tool}"
-    record_success "$tool" "$desc" "$chain"
+    local _swb=0; [ "${ALL_ARGS[1]:-}" = "" ] && _swb=1; record_success "$tool" "$desc" "$chain" "" "$_swb"
 }
 
 do_history() {
@@ -729,6 +729,11 @@ try_source_build() {
 # ── 核心搜索逻辑 ─────────────────────────────────────
 
 do_search() {
+    # 空关键词保护
+    if [ -z "$QUERY" ]; then
+        echo -e "${RED}错误: 关键词不能为空${NC}"
+        exit 1
+    fi
     local MF=0 AF=0 PF=0 NF=0 SF=0 CF=0
     local MC="" MCMD=""
 
@@ -747,10 +752,10 @@ do_search() {
     local HITS=""
     if [ -f "$MAP_FILE" ]; then
         # 精确匹配工具名
-        HITS=$(grep -i "| \`${QUERY}" "$MAP_FILE" 2>/dev/null | grep "^|" | head -5 || true)
+        HITS=$(grep -i "| \`${QUERY}" "$MAP_FILE" 2>/dev/null | grep "^|" | grep -v "command not found: xxx" | head -5 || true)
         # 中文描述搜索
         if [ -z "$HITS" ]; then
-            HITS=$(grep -i "$QUERY" "$MAP_FILE" 2>/dev/null | grep "^|" | grep -v "^| 任务" | grep -v "^|------" | grep -v "^| 能力" | head -5 || true)
+            HITS=$(grep -i "$QUERY" "$MAP_FILE" 2>/dev/null | grep "^|" | grep -v "^| 任务" | grep -v "^|------" | grep -v "^| 能力" | grep -v "command not found: xxx" | head -5 || true)
         fi
         # 去除常见前缀/后缀再搜
         if [ -z "$HITS" ]; then
