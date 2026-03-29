@@ -158,14 +158,14 @@ verify_cmd() {
     for n in "${names[@]}"; do
         if command -v "$n" &>/dev/null; then
             local ver; ver=$("$n" --version 2>/dev/null | head -1 || echo "installed")
-            echo -e "  ${GREEN}${BOLD}✅ 安装成功: ${n} — ${ver}${NC}"; return 0
+            echo -e "  ${GREEN}${BOLD}✅ 安装成功: ${n} — ${ver}${NC}" >&2; return 0
         fi
     done
     # 最后兜底：检查 dpkg 是否已安装此包
     if dpkg -s "$cmd" 2>/dev/null | grep -q "Status: install ok installed"; then
-        echo -e "  ${GREEN}${BOLD}✅ 安装成功: ${cmd} (dpkg 确认已安装)${NC}"; return 0
+        echo -e "  ${GREEN}${BOLD}✅ 安装成功: ${cmd} (dpkg 确认已装)${NC}" >&2; return 0
     fi
-    echo -e "  ${RED}${BOLD}❌ 验证失败: ${cmd} 不存在${NC}"; return 1
+    echo -e "  ${RED}${BOLD}❌ 验证失败: ${cmd} 不存在${NC}" >&2; return 1
 }
 
 extract_cmd_name() {
@@ -626,7 +626,7 @@ try_download() {
     fi
 
     if [ -z "$repo_path" ]; then
-        echo -e "  ${YELLOW}  ⚠ 无法解析 GitHub 仓库${NC}"
+        echo -e "  ${YELLOW}  ⚠ 无法解析 GitHub 仓库${NC}" >&2
         echo 0; return 0
     fi
 
@@ -635,44 +635,46 @@ try_download() {
     local suffix
     case "$arch" in x86_64) suffix="amd64";; aarch64|arm64) suffix="arm64";; *) suffix="$arch";; esac
 
-    echo -e "  ${CYAN}  🔍 查询 Release: ${repo_path}${NC}"
+    echo -e "  ${CYAN}  🔍 查询 Release: ${repo_path}${NC}" >&2
     local rjson
     rjson=$(curl -s --connect-timeout 5 --max-time 10 "https://api.github.com/repos/${repo_path}/releases/latest" 2>/dev/null || true)
 
     if [ -z "$rjson" ] || echo "$rjson" | grep -q '"message": "Not Found"'; then
-        echo -e "  ${YELLOW}  ⚠ 无 Release 信息${NC}"; echo 0; return 0
+        echo -e "  ${YELLOW}  ⚠ 无 Release 信息${NC}" >&2; echo 0; return 0
     fi
 
     local asset_url
     asset_url=$(echo "$rjson" | grep -oP '"browser_download_url":\s*"\K[^"]+' | grep -i "$os" | grep -i "$suffix" | head -1 || true)
-    [ -z "$asset_url" ] && asset_url=$(echo "$rjson" | grep -oP '"browser_download_url":\s*"\K[^"]+' | grep -i "linux" | head -1 || true)
+    # x86_64 ↔ amd64 别名重试
+    [ -z "$asset_url" ] && { local alt_sfx; [ "$suffix" = "amd64" ] && alt_sfx="x86_64" || alt_sfx="amd64"; asset_url=$(echo "$rjson" | grep -oP '"browser_download_url":\s*"\K[^"]+' | grep -i "$os" | grep -i "$alt_sfx" | head -1 || true); }
+    [ -z "$asset_url" ] && asset_url=$(echo "$rjson" | grep -oP '"browser_download_url":\s*"\K[^"]+' | grep -i "linux" | grep -v "sha256" | head -1 || true)
 
     if [ -z "$asset_url" ]; then
         local page; page=$(github_mirror_url "https://github.com/${repo_path}/releases/latest")
-        echo -e "  ${YELLOW}  ⚠ 未找到 ${os}/${suffix} 的二进制${NC}"
-        echo -e "  ${CYAN}  📋 Release 页面: ${page}${NC}"; echo 0; return 0
+        echo -e "  ${YELLOW}  ⚠ 未找到 ${os}/${suffix} 的二进制${NC}" >&2
+        echo -e "  ${CYAN}  📋 Release 页面: ${page}${NC}" >&2; echo 0; return 0
     fi
 
     local mirror_url; mirror_url=$(github_mirror_url "$asset_url")
     local filename; filename=$(basename "$asset_url")
-    echo -e "  ${CYAN}  ⬇️  下载: ${mirror_url}${NC}"
+    echo -e "  ${CYAN}  ⬇️  下载: ${mirror_url}${NC}" >&2
 
     if ! curl -sL --connect-timeout 10 --max-time 120 "$mirror_url" -o "/tmp/${filename}" 2>/dev/null; then
-        echo -e "  ${YELLOW}  ✗ 下载失败${NC}"; echo 0; return 0
+        echo -e "  ${YELLOW}  ✗ 下载失败${NC}" >&2; echo 0; return 0
     fi
 
-    echo -e "  ${GREEN}  ✓ 下载完成: /tmp/${filename}${NC}"
+    echo -e "  ${GREEN}  ✓ 下载完成: /tmp/${filename}${NC}" >&2
 
     # 自动解压+安装
     local tmpdir="/tmp/ai-extract-$$"; mkdir -p "$tmpdir"
     case "$filename" in
         *.tar.gz|*.tgz) tar -xzf "/tmp/${filename}" -C "$tmpdir" 2>/dev/null ;;
         *.zip) unzip -o "/tmp/${filename}" -d "$tmpdir" 2>/dev/null ;;
-        *.deb) ${sudo_p}dpkg -i "/tmp/${filename}" 2>/dev/null && { verify_cmd "$cmd_name"; echo $?; return 0; } ;;
+        *.deb) if ${sudo_p}dpkg -i "/tmp/${filename}" 2>/dev/null; then if verify_cmd "$cmd_name"; then echo 1; else echo 0; fi; return 0; fi ;;
         *) cp "/tmp/${filename}" "$tmpdir/" 2>/dev/null ;;
     esac
 
-    local binary; binary=$(find "$tmpdir" -maxdepth 3 -name "$cmd_name" -type f 2>/dev/null | head -1 || true)
+    local _short; _short=$(extract_cmd_name "$cmd_name"); local binary; binary=$(find "$tmpdir" -maxdepth 3 -name "$_short" -type f 2>/dev/null | head -1 || true)
     if [ -n "$binary" ]; then
         ${sudo_p}install -m 755 "$binary" /usr/local/bin/ 2>/dev/null
         rm -rf "$tmpdir"
@@ -680,16 +682,16 @@ try_download() {
     fi
 
     # 试着找任何同名可执行文件
-    binary=$(find "$tmpdir" -maxdepth 3 -type f -executable -name "$cmd_name*" 2>/dev/null | head -1 || true)
+    binary=$(find "$tmpdir" -maxdepth 3 -type f -executable -name "$_short*" 2>/dev/null | head -1 || true)
     if [ -n "$binary" ]; then
-        ${sudo_p}install -m 755 "$binary" /usr/local/bin/"$cmd_name" 2>/dev/null
+        ${sudo_p}install -m 755 "$binary" /usr/local/bin/"$_short" 2>/dev/null
         rm -rf "$tmpdir"
         verify_cmd "$cmd_name" && { echo 1; return 0; }
     fi
 
     rm -rf "$tmpdir"
-    echo -e "  ${YELLOW}  ⚠ 下载成功但未找到可执行文件，请手动安装${NC}"
-    echo -e "  ${CYAN}  文件: /tmp/${filename}${NC}"
+    echo -e "  ${YELLOW}  ⚠ 下载成功但未找到可执行文件，请手动安装${NC}" >&2
+    echo -e "  ${CYAN}  文件: /tmp/${filename}${NC}" >&2
     echo 0
 }
 
@@ -705,15 +707,15 @@ try_source_build() {
     fi
 
     if [ -z "$repo" ]; then
-        echo -e "  ${YELLOW}  ⚠ 无仓库信息，无法编译${NC}"; echo 0; return 0
+        echo -e "  ${YELLOW}  ⚠ 无仓库信息，无法编译${NC}" >&2; echo 0; return 0
     fi
 
     local src_url; src_url=$(github_mirror_url "https://github.com/${repo}.git")
-    echo -e "  ${CYAN}  📥 克隆: ${src_url}${NC}"
+    echo -e "  ${CYAN}  📥 克隆: ${src_url}${NC}" >&2
     local dir="/tmp/ai-build-${cmd_name}-$$"; rm -rf "$dir"
 
     if ! git clone --depth 1 "$src_url" "$dir" 2>/dev/null; then
-        echo -e "  ${YELLOW}  ✗ 克隆失败${NC}"; echo 0; return 0
+        echo -e "  ${YELLOW}  ✗ 克隆失败${NC}" >&2; echo 0; return 0
     fi
 
     if [ -f "${dir}/Makefile" ]; then
@@ -723,7 +725,7 @@ try_source_build() {
     fi
 
     rm -rf "$dir"
-    echo -e "  ${YELLOW}  ✗ 编译失败${NC}"; echo 0
+    echo -e "  ${YELLOW}  ✗ 编译失败${NC}" >&2; echo 0
 }
 
 # ── 核心搜索逻辑 ─────────────────────────────────────
