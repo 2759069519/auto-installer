@@ -3,9 +3,9 @@
 > 遇到以下任务时，直接查表安装对应工具。每条记录包含**降级链**——首选失败自动试下一条。
 
 **降级链格式：** `方式1 → 方式2 → 方式3`
-- `apt` = 系统包管理器 (自动适配: apt/dnf/yum/pacman/brew/apk)
+- `apt` = apt install -y
 - `snap` = snap install
-- `pip` = pip3 install (安全模式: pipx → venv → 用户级安装)
+- `pip` = pip3 install --break-system-packages
 - `npm` = npm install -g
 - `dl` = 自动下载 GitHub Release 二进制（国内镜像加速）
 - `src` = 源码编译
@@ -330,7 +330,7 @@ apt install -y pandoc poppler-utils wkhtmltopdf ghostscript
 apt install -y httpie dnsutils mtr-tiny socat nmap certbot
 
 # 🐍 Python 数据科学全家桶
-pip3 install numpy pandas scipy scikit-learn matplotlib seaborn
+pip3 install --break-system-packages numpy pandas scipy scikit-learn matplotlib seaborn
 
 # 🎵 音频处理全家桶
 apt install -y sox libsox-fmt-all lame opus-tools flac mpg123 normalize-audio
